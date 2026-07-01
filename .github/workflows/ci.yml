@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main, staging]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # Expose whether the pipepush secret is configured (secrets can't be used
+    # directly in step `if:` — evaluate to a boolean here instead).
+    env:
+      HAS_PIPEPUSH: ${{ secrets.PIPEPUSH_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate metadata.json
+        run: |
+          node -e '
+            const m = require("./metadata.json");
+            const need = ["uuid", "name", "description", "shell-version"];
+            const missing = need.filter(k => !(k in m));
+            if (missing.length) { console.error("missing keys:", missing); process.exit(1); }
+            if (!Array.isArray(m["shell-version"]) || !m["shell-version"].length) {
+              console.error("shell-version must be a non-empty array"); process.exit(1);
+            }
+            console.log("metadata.json OK:", m.uuid, m["shell-version"].join(","));
+          '
+
+      - name: Syntax-check extension sources
+        run: |
+          for f in extension.js decorator.js; do
+            cp "$f" "$f.mjs"
+            node --check "$f.mjs"
+            rm -f "$f.mjs"
+            echo "$f: syntax OK"
+          done
+
+      - name: Package extension zip
+        run: |
+          UUID=$(node -p 'require("./metadata.json").uuid')
+          zip -q "$UUID.shell-extension.zip" \
+            extension.js decorator.js stylesheet.css metadata.json
+          echo "packed $UUID.shell-extension.zip"
+
+      - name: Upload extension artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mission-ws-extension
+          path: "*.shell-extension.zip"
+          if-no-files-found: error
+
+      - name: Notify pipepush
+        if: always() && env.HAS_PIPEPUSH == 'true'
+        run: |
+          curl -sf -X POST "$PIPEPUSH_SERVER/api/webhook" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"token\": \"$PIPEPUSH_TOKEN\",
+              \"status\": \"${{ job.status }}\",
+              \"pipeline\": \"${{ github.workflow }}\",
+              \"branch\": \"${{ github.ref_name }}\",
+              \"commit\": \"${{ github.sha }}\",
+              \"runId\": \"${{ github.run_number }}\"
+            }"
+        env:
+          PIPEPUSH_TOKEN: ${{ secrets.PIPEPUSH_TOKEN }}
+          PIPEPUSH_SERVER: ${{ vars.PIPEPUSH_SERVER }}
