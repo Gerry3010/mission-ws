@@ -1,0 +1,38 @@
+/* SPDX-License-Identifier: MIT */
+
+.mission-ws-circle {
+    border-radius: 999px;
+    background-color: rgba(40, 40, 40, 0.92);
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
+    padding: 0;
+    transition-duration: 120ms;
+}
+
+.mission-ws-circle:hover {
+    background-color: rgba(70, 70, 70, 0.98);
+    border-color: rgba(255, 255, 255, 0.7);
+}
+
+.mission-ws-circle:active {
+    background-color: rgba(20, 20, 20, 1.0);
+}
+
+/* Close button leans red, like the macOS traffic-light close. */
+.mission-ws-close:hover {
+    background-color: rgba(220, 60, 60, 0.98);
+    border-color: rgba(255, 180, 180, 0.9);
+}
+
+/* Reorder handle hints at grab affordance. */
+.mission-ws-handle:hover {
+    background-color: rgba(60, 120, 220, 0.98);
+    border-color: rgba(180, 210, 255, 0.9);
+}
+
+/* Highlight the thumbnail a reorder drag is currently targeting. */
+.mission-ws-drop-target {
+    border: 2px solid rgba(120, 170, 255, 0.95);
+    border-radius: 6px;
+}

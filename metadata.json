@@ -1,0 +1,8 @@
+{
+  "uuid": "mission-ws@geraldhofbauer.net",
+  "name": "Mission WS",
+  "description": "Reorder GNOME workspaces by drag & drop, with Mac-Mission-Control-style hover circles on the overview thumbnails: a drag handle (top-left) to reorder and a close button (top-right) to remove a workspace.",
+  "shell-version": ["48", "49", "50"],
+  "url": "https://github.com/Gerry3010/mission-ws",
+  "version-name": "0.1.0"
+}
