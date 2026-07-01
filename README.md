@@ -1,5 +1,7 @@
 # Mission WS
 
+[![CI](https://github.com/Gerry3010/mission-ws/actions/workflows/ci.yml/badge.svg)](https://github.com/Gerry3010/mission-ws/actions/workflows/ci.yml)
+
 Reorder GNOME workspaces by **drag & drop**, right from the overview thumbnail
 strip — with Mac-Mission-Control-style circular hover buttons.
 
