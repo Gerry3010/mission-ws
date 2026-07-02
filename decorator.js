@@ -14,11 +14,12 @@ import GLib from 'gi://GLib';
 import St from 'gi://St';
 
 import * as DND from 'resource:///org/gnome/shell/ui/dnd.js';
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 const BUTTON_SIZE = 22;   // circle diameter in px (radius = SIZE / 2)
-const HOVER_EXTRA = 8;    // px added *beyond* the radius before circles hide
+const HOVER_EXTRA = 8;    // px of grace above the top edge (to reach the circles)
 const FADE_TIME = 120;    // ms fade in/out
-const POLL_INTERVAL = 120; // ms pointer poll while a thumbnail is shown
+const POLL_INTERVAL = 120; // ms between pointer polls (one shared timer)
 
 const DROP_TARGET_CLASS = 'mission-ws-drop-target';
 
@@ -31,13 +32,48 @@ export class ThumbnailDecorator {
     constructor() {
         this._decorated = new Set();       // decorated WorkspaceThumbnail actors
         this._dropTargets = new Set();      // thumbnails currently highlighted
+        this._pollId = 0;
+
+        // A single pointer poll drives show/hide for *all* thumbnails (see
+        // _updateHover). The thumbnails only exist while the overview is up, so
+        // the timer runs only then — no idle wakeups when it's closed.
+        this._overviewSignals = [
+            Main.overview.connect('showing', () => this._startPoll()),
+            Main.overview.connect('hidden', () => this._stopPoll()),
+        ];
+        if (Main.overview.visible)
+            this._startPoll();
     }
 
     destroy() {
+        this._stopPoll();
+        for (const id of this._overviewSignals)
+            Main.overview.disconnect(id);
+        this._overviewSignals = [];
         for (const thumb of [...this._decorated])
             this._undecorate(thumb);
         this._decorated.clear();
         this.clearAllDropTargets();
+    }
+
+    _startPoll() {
+        if (this._pollId)
+            return;
+        this._pollId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, POLL_INTERVAL,
+            () => {
+                this._updateHover();
+                return GLib.SOURCE_CONTINUE;
+            });
+    }
+
+    _stopPoll() {
+        if (this._pollId) {
+            GLib.source_remove(this._pollId);
+            this._pollId = 0;
+        }
+        // Don't leave any circles faded-in for the next overview open.
+        for (const thumb of this._decorated)
+            this._hide(thumb);
     }
 
     /** Idempotently add the hover circles + drag handle to a thumbnail. */
@@ -48,7 +84,6 @@ export class ThumbnailDecorator {
         const state = {
             shown: false,
             dragging: false,
-            pollId: 0,
             signalIds: [],
         };
         thumb._missionWs = state;
@@ -114,19 +149,6 @@ export class ThumbnailDecorator {
         // Clean up automatically when the shell destroys the thumbnail.
         thumb.connect('destroy', () => this._undecorate(thumb));
 
-        // Drive show/hide by polling the pointer against the expanded rect.
-        // Robust against crossing-event quirks with the window clones on top.
-        state.pollId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, POLL_INTERVAL,
-            () => {
-                if (!thumb._missionWs)
-                    return GLib.SOURCE_REMOVE;
-                if (state.dragging || this._pointerInside(thumb))
-                    this._show(thumb);
-                else
-                    this._hide(thumb);
-                return GLib.SOURCE_CONTINUE;
-            });
-
         this._decorated.add(thumb);
     }
 
@@ -174,15 +196,89 @@ export class ThumbnailDecorator {
         state.close.set_position(w - r, -r);
     }
 
-    _pointerInside(thumb) {
+    /**
+     * Pick the single thumbnail whose controls should be visible this tick and
+     * hide every other one. Precedence:
+     *   1. a thumbnail being dragged keeps its own controls,
+     *   2. else a *visible* button under the pointer wins — so a button that
+     *      overhangs a neighbour still shows only its own thumbnail's controls,
+     *   3. else the preview directly under the pointer.
+     */
+    _updateHover() {
+        if (this._decorated.size === 0)
+            return;
         const [px, py] = global.get_pointer();
+
+        let active = null;
+        for (const thumb of this._decorated) {
+            if (thumb._missionWs?.dragging) {
+                active = thumb;
+                break;
+            }
+        }
+        if (!active) {
+            for (const thumb of this._decorated) {
+                if (this._pointerOnButtons(thumb, px, py)) {
+                    active = thumb;
+                    break;
+                }
+            }
+        }
+        if (!active) {
+            for (const thumb of this._decorated) {
+                if (this._pointerOnPreview(thumb, px, py)) {
+                    active = thumb;
+                    break;
+                }
+            }
+        }
+
+        for (const thumb of this._decorated) {
+            if (thumb === active)
+                this._show(thumb);
+            else
+                this._hide(thumb);
+        }
+
+        // Raise the one active thumbnail above all its siblings (neighbours
+        // *and* the active-workspace indicator), so both overhanging circles
+        // render on top of everything. Only one is ever raised, and thumbnails
+        // don't otherwise overlap, so this has no other visual effect.
+        if (active)
+            active.get_parent()?.set_child_above_sibling(active, null);
+    }
+
+    /**
+     * Pointer directly over the preview. Sides/bottom are tight so a neighbour
+     * never lights up; only the top is extended (by the button radius plus a
+     * little) so moving up onto the overhanging circles keeps them shown.
+     */
+    _pointerOnPreview(thumb, px, py) {
         const [tx, ty] = thumb.get_transformed_position();
         const [tw, th] = thumb.get_transformed_size();
         if (!Number.isFinite(tx) || tw <= 0)
             return false;
-        const m = BUTTON_SIZE / 2 + HOVER_EXTRA;
-        return px >= tx - m && px <= tx + tw + m &&
-               py >= ty - m && py <= ty + th + m;
+        const topExtra = BUTTON_SIZE / 2 + HOVER_EXTRA;
+        return px >= tx && px <= tx + tw &&
+               py >= ty - topExtra && py <= ty + th;
+    }
+
+    /** Pointer over one of this thumbnail's own currently-visible circles. */
+    _pointerOnButtons(thumb, px, py) {
+        const state = thumb._missionWs;
+        if (!state)
+            return false;
+        for (const btn of [state.handle, state.close]) {
+            if (!btn?.visible)
+                continue;
+            const [bx, by] = btn.get_transformed_position();
+            const [bw, bh] = btn.get_transformed_size();
+            if (!Number.isFinite(bx) || bw <= 0)
+                continue;
+            if (px >= bx && px <= bx + bw && py >= by && py <= by + bh)
+                return true;
+        }
+        return false;
     }
 
     _show(thumb) {
@@ -228,8 +324,6 @@ export class ThumbnailDecorator {
         if (!state)
             return;
 
-        if (state.pollId)
-            GLib.source_remove(state.pollId);
         for (const id of state.signalIds)
             thumb.disconnect(id);
         state.draggable?.disconnectAll?.();

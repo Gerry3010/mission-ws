@@ -35,11 +35,13 @@ pack:
 
 zip: pack
 
-# Launch a throwaway nested shell with the extension enabled (Wayland-safe;
-# does not touch your live session).
+# Launch a throwaway nested shell with the extension enabled, in a window
+# (Wayland-safe; does not touch your live session). GNOME 48+ dropped the old
+# `--nested` flag; the current dev path is `--devkit`, which runs a headless
+# no-modeset shell (no seat/logind conflict) shown by the mutter-devkit viewer.
+# Requires the `mutter-devkit` package (Arch/Manjaro: `pacman -S mutter-devkit`).
 test: install
-	env MUTTER_DEBUG_DUMMY_MODE_SPECS=1400x900 \
-		dbus-run-session -- gnome-shell --nested --wayland
+	dbus-run-session -- gnome-shell --devkit
 
 lint:
 	@command -v eslint >/dev/null 2>&1 && eslint . || \
