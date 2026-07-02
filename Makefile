@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 UUID = mission-ws@geraldhofbauer.net
 EXTDIR = $(HOME)/.local/share/gnome-shell/extensions/$(UUID)
-SOURCES = extension.js decorator.js stylesheet.css metadata.json
+SOURCES = extension.js decorator.js appgrid.js stylesheet.css metadata.json
 
 .PHONY: install install-link uninstall enable disable pack zip test lint
 
@@ -31,6 +31,7 @@ disable:
 pack:
 	gnome-extensions pack --force \
 		--extra-source=decorator.js \
+		--extra-source=appgrid.js \
 		.
 
 zip: pack

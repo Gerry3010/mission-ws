@@ -5,14 +5,18 @@
 //
 // Strategy: patch the native ThumbnailsBox (workspaceThumbnail.js) via
 // InjectionManager instead of building a separate popup, so we reuse the
-// shell's live workspace previews and layout.
+// shell's live workspace previews and layout. The same treatment is applied to
+// the WorkspacesView `Workspace` tiles shown in the app-grid ("Launchpad").
 
 import {Extension, InjectionManager}
     from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as DND from 'resource:///org/gnome/shell/ui/dnd.js';
 import {ThumbnailsBox} from 'resource:///org/gnome/shell/ui/workspaceThumbnail.js';
+import {WorkspacesView} from 'resource:///org/gnome/shell/ui/workspacesView.js';
+import {Workspace} from 'resource:///org/gnome/shell/ui/workspace.js';
 
 import {ThumbnailDecorator} from './decorator.js';
+import {WorkspaceTileDecorator} from './appgrid.js';
 
 export default class MissionWsExtension extends Extension {
     enable() {
@@ -56,6 +60,43 @@ export default class MissionWsExtension extends Extension {
                 }
                 return originalMethod.call(this, source, actor, x, y, time);
             });
+
+        // --- App-grid ("Launchpad") workspace tiles ---
+        this._tileDecorator = new WorkspaceTileDecorator();
+        const tileDecorator = this._tileDecorator;
+
+        // _updateWorkspaces() is the choke-point where WorkspacesView (re)builds
+        // its `Workspace` tiles.
+        this._injections.overrideMethod(WorkspacesView.prototype, '_updateWorkspaces',
+            originalMethod => function (...args) {
+                originalMethod.apply(this, args);
+                for (const tile of this._workspaces)
+                    tileDecorator.decorateTile(tile);
+            });
+
+        // A tile is itself a drop target (its metaWorkspace index IS the slot),
+        // so we recognise our reorder drag on the tile's own drag interface.
+        this._injections.overrideMethod(Workspace.prototype, 'handleDragOver',
+            originalMethod => function (source, actor, x, y, time) {
+                if (source?.isMissionWsReorder) {
+                    tileDecorator.setDropTarget(this);
+                    return DND.DragMotionResult.MOVE_DROP;
+                }
+                return originalMethod.call(this, source, actor, x, y, time);
+            });
+
+        this._injections.overrideMethod(Workspace.prototype, 'acceptDrop',
+            originalMethod => function (source, actor, x, y, time) {
+                if (source?.isMissionWsReorder) {
+                    tileDecorator.clearAllDropTargets();
+                    if (source.sourceWorkspace && this.metaWorkspace) {
+                        global.workspace_manager.reorder_workspace(
+                            source.sourceWorkspace, this.metaWorkspace.index());
+                    }
+                    return true;
+                }
+                return originalMethod.call(this, source, actor, x, y, time);
+            });
     }
 
     disable() {
@@ -63,6 +104,8 @@ export default class MissionWsExtension extends Extension {
         this._injections = null;
         this._decorator?.destroy();
         this._decorator = null;
+        this._tileDecorator?.destroy();
+        this._tileDecorator = null;
     }
 }
 
