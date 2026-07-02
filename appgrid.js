@@ -20,7 +20,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 const BUTTON_SIZE = 36;    // bigger than the strip's 22px, for the large tiles
 const ICON_SIZE = 20;
-const MARGIN = 10;         // inset from the tile corner
+const HOVER_EXTRA = 8;     // px of grace above the top edge (to reach circles)
 const FADE_TIME = 120;     // ms
 const POLL_INTERVAL = 120; // ms
 const APP_GRID_STATE = 2;  // ControlsState.APP_GRID
@@ -66,13 +66,21 @@ export class WorkspaceTileDecorator {
         const state = {shown: false, dragging: false, signalIds: []};
         tile._missionWsTile = state;
 
+        // Let the circles overhang the tile corners (like the strip) rather
+        // than sitting inside; the tile clips its children by default, so
+        // disable it and restore the previous value on teardown.
+        state.hadClip = tile.clip_to_allocation;
+        tile.clip_to_allocation = false;
+
         // Workspace uses a BinLayout for its own children, so buttons added
-        // here are allocated and positioned by alignment (the WorkspaceLayout
-        // that lays out window clones lives on tile._container, not on `tile`).
+        // here are placed by alignment (the WorkspaceLayout that lays out window
+        // clones lives on tile._container, not on `tile`); a translation then
+        // pulls each circle half-way outside its corner.
+        const r = BUTTON_SIZE / 2;
         const handle = this._makeCircle('list-drag-handle-symbolic',
-            'mission-ws-handle', Clutter.ActorAlign.START);
+            'mission-ws-handle', Clutter.ActorAlign.START, -r);
         const close = this._makeCircle('window-close-symbolic',
-            'mission-ws-close', Clutter.ActorAlign.END);
+            'mission-ws-close', Clutter.ActorAlign.END, r);
         tile.add_child(handle);
         tile.add_child(close);
         state.handle = handle;
@@ -153,7 +161,7 @@ export class WorkspaceTileDecorator {
             this._hide(tile);
     }
 
-    _makeCircle(iconName, styleClass, xAlign) {
+    _makeCircle(iconName, styleClass, xAlign, translationX) {
         const button = new St.Button({
             style_class: `mission-ws-circle mission-ws-circle-large ${styleClass}`,
             reactive: true,
@@ -166,7 +174,9 @@ export class WorkspaceTileDecorator {
             y_expand: true,
         });
         button.set_size(BUTTON_SIZE, BUTTON_SIZE);
-        button.set_style(`margin: ${MARGIN}px;`);
+        // Overhang the corner: half outside horizontally, half above the top.
+        button.translation_x = translationX;
+        button.translation_y = -BUTTON_SIZE / 2;
         button.opacity = 0;
         button.visible = false;
         return button;
@@ -197,6 +207,15 @@ export class WorkspaceTileDecorator {
                 break;
             }
         }
+        // A visible circle wins even where it overhangs a neighbour tile.
+        if (!active) {
+            for (const tile of this._decorated) {
+                if (this._pointerOnButtons(tile, px, py)) {
+                    active = tile;
+                    break;
+                }
+            }
+        }
         if (!active) {
             for (const tile of this._decorated) {
                 if (this._pointerOnTile(tile, px, py)) {
@@ -219,7 +238,28 @@ export class WorkspaceTileDecorator {
         const [tw, th] = tile.get_transformed_size();
         if (!Number.isFinite(tx) || tw <= 0)
             return false;
-        return px >= tx && px <= tx + tw && py >= ty && py <= ty + th;
+        // Sides/bottom tight (no neighbour bleed); top extended so moving up
+        // onto the overhanging circles keeps them shown.
+        const topExtra = BUTTON_SIZE / 2 + HOVER_EXTRA;
+        return px >= tx && px <= tx + tw &&
+               py >= ty - topExtra && py <= ty + th;
+    }
+
+    _pointerOnButtons(tile, px, py) {
+        const state = tile._missionWsTile;
+        if (!state)
+            return false;
+        for (const btn of [state.handle, state.close]) {
+            if (!btn?.visible)
+                continue;
+            const [bx, by] = btn.get_transformed_position();
+            const [bw, bh] = btn.get_transformed_size();
+            if (!Number.isFinite(bx) || bw <= 0)
+                continue;
+            if (px >= bx && px <= bx + bw && py >= by && py <= by + bh)
+                return true;
+        }
+        return false;
     }
 
     _show(tile) {
@@ -269,6 +309,7 @@ export class WorkspaceTileDecorator {
             tile.disconnect(id);
         state.draggable?.disconnectAll?.();
 
+        tile.clip_to_allocation = state.hadClip;
         tile.remove_style_class_name?.(DROP_TARGET_CLASS);
         this._dropTargets.delete(tile);
 
