@@ -39,19 +39,17 @@ export class WorkspaceTileDecorator {
         this._dropTargets = new Set();
         this._pollId = 0;
 
-        this._overviewSignals = [
-            Main.overview.connect('showing', () => this._startPoll()),
-            Main.overview.connect('hidden', () => this._stopPoll()),
-        ];
+        Main.overview.connectObject(
+            'showing', () => this._startPoll(),
+            'hidden', () => this._stopPoll(),
+            this);
         if (Main.overview.visible)
             this._startPoll();
     }
 
     destroy() {
         this._stopPoll();
-        for (const id of this._overviewSignals)
-            Main.overview.disconnect(id);
-        this._overviewSignals = [];
+        Main.overview.disconnectObject(this);
         for (const tile of [...this._decorated])
             this._undecorate(tile);
         this._decorated.clear();
@@ -63,7 +61,7 @@ export class WorkspaceTileDecorator {
         if (!tile || tile._missionWsTile)
             return;
 
-        const state = {shown: false, dragging: false, signalIds: []};
+        const state = {shown: false, dragging: false};
         tile._missionWsTile = state;
 
         // Let the circles overhang the tile corners (like the strip) rather
@@ -86,7 +84,7 @@ export class WorkspaceTileDecorator {
         state.handle = handle;
         state.close = close;
 
-        close.connect('clicked', () => this._onClose(tile));
+        close.connectObject('clicked', () => this._onClose(tile), this);
 
         handle._delegate = {
             isMissionWsReorder: true,
@@ -119,7 +117,7 @@ export class WorkspaceTileDecorator {
         tile.set_child_above_sibling(handle, null);
         tile.set_child_above_sibling(close, null);
 
-        tile.connect('destroy', () => this._undecorate(tile));
+        tile.connectObject('destroy', () => this._undecorate(tile), this);
 
         this._decorated.add(tile);
     }
@@ -305,8 +303,7 @@ export class WorkspaceTileDecorator {
         if (!state)
             return;
 
-        for (const id of state.signalIds)
-            tile.disconnect(id);
+        tile.disconnectObject(this);
         state.draggable?.disconnectAll?.();
 
         tile.clip_to_allocation = state.hadClip;

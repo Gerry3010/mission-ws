@@ -37,19 +37,17 @@ export class ThumbnailDecorator {
         // A single pointer poll drives show/hide for *all* thumbnails (see
         // _updateHover). The thumbnails only exist while the overview is up, so
         // the timer runs only then — no idle wakeups when it's closed.
-        this._overviewSignals = [
-            Main.overview.connect('showing', () => this._startPoll()),
-            Main.overview.connect('hidden', () => this._stopPoll()),
-        ];
+        Main.overview.connectObject(
+            'showing', () => this._startPoll(),
+            'hidden', () => this._stopPoll(),
+            this);
         if (Main.overview.visible)
             this._startPoll();
     }
 
     destroy() {
         this._stopPoll();
-        for (const id of this._overviewSignals)
-            Main.overview.disconnect(id);
-        this._overviewSignals = [];
+        Main.overview.disconnectObject(this);
         for (const thumb of [...this._decorated])
             this._undecorate(thumb);
         this._decorated.clear();
@@ -84,7 +82,6 @@ export class ThumbnailDecorator {
         const state = {
             shown: false,
             dragging: false,
-            signalIds: [],
         };
         thumb._missionWs = state;
 
@@ -105,7 +102,7 @@ export class ThumbnailDecorator {
         thumb.add_child(close);
         state.close = close;
 
-        close.connect('clicked', () => this._onClose(thumb));
+        close.connectObject('clicked', () => this._onClose(thumb), this);
 
         // --- make the handle draggable to reorder the workspace ---
         handle._delegate = {
@@ -140,14 +137,15 @@ export class ThumbnailDecorator {
         thumb.set_child_above_sibling(handle, null);
         thumb.set_child_above_sibling(close, null);
 
-        // Reposition on resize (thumbnails rescale as workspaces are added).
+        // Reposition on resize (thumbnails rescale as workspaces are added),
+        // and clean up automatically when the shell destroys the thumbnail.
         const reposition = () => this._positionCircles(thumb);
-        state.signalIds.push(thumb.connect('notify::width', reposition));
-        state.signalIds.push(thumb.connect('notify::height', reposition));
+        thumb.connectObject(
+            'notify::width', reposition,
+            'notify::height', reposition,
+            'destroy', () => this._undecorate(thumb),
+            this);
         reposition();
-
-        // Clean up automatically when the shell destroys the thumbnail.
-        thumb.connect('destroy', () => this._undecorate(thumb));
 
         this._decorated.add(thumb);
     }
@@ -324,8 +322,7 @@ export class ThumbnailDecorator {
         if (!state)
             return;
 
-        for (const id of state.signalIds)
-            thumb.disconnect(id);
+        thumb.disconnectObject(this);
         state.draggable?.disconnectAll?.();
 
         // Restore native clipping and drop any highlight.
