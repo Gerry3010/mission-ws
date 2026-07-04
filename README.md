@@ -18,6 +18,11 @@ Clicking the preview itself still activates the workspace (native behaviour is
 untouched). The circles only disappear once the pointer leaves the preview
 **plus the circle radius**, so they don't flicker away at the edge.
 
+The same handle + close circles also appear on the larger workspace tiles in
+the app-grid ("Launchpad") view:
+
+![The reorder handle and close button on the app-grid workspace tiles](docs/appgrid.png)
+
 ## Requirements
 
 - GNOME Shell **48 – 50** (developed and tested on 50.1, Wayland).
