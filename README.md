@@ -5,8 +5,6 @@
 Reorder GNOME workspaces by **drag & drop**, right from the overview thumbnail
 strip — with Mac-Mission-Control-style circular hover buttons.
 
-![Mission WS — drag &amp; drop workspace reorder with hover circles](docs/demo.gif)
-
 When you hover a workspace preview, two circles appear centred on its top
 corners (they overhang the edge, like macOS):
 
@@ -14,14 +12,16 @@ corners (they overhang the edge, like macOS):
   position in the strip.
 - **top-right — close:** removes that workspace.
 
+![The reorder handle and close circles on the overview thumbnail strip](docs/strip.png)
+
 Clicking the preview itself still activates the workspace (native behaviour is
 untouched). The circles only disappear once the pointer leaves the preview
 **plus the circle radius**, so they don't flicker away at the edge.
 
-The same handle + close circles also appear on the larger workspace tiles in
-the app-grid ("Launchpad") view:
+The same controls also work on the larger workspace tiles in the app-grid
+("Launchpad") view — here reordering one by drag &amp; drop:
 
-![The reorder handle and close button on the app-grid workspace tiles](docs/appgrid.png)
+![Drag-reordering a workspace in the app-grid (Launchpad) view](docs/demo.gif)
 
 ## Requirements
 
