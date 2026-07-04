@@ -5,6 +5,8 @@
 Reorder GNOME workspaces by **drag & drop**, right from the overview thumbnail
 strip — with Mac-Mission-Control-style circular hover buttons.
 
+![Mission WS — drag &amp; drop workspace reorder with hover circles](docs/demo.gif)
+
 When you hover a workspace preview, two circles appear centred on its top
 corners (they overhang the edge, like macOS):
 
