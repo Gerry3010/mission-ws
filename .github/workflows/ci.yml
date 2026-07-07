@@ -31,7 +31,7 @@ jobs:
 
       - name: Syntax-check extension sources
         run: |
-          for f in extension.js decorator.js appgrid.js; do
+          for f in extension.js decoratorBase.js decorator.js appgrid.js; do
             cp "$f" "$f.mjs"
             node --check "$f.mjs"
             rm -f "$f.mjs"
@@ -42,7 +42,7 @@ jobs:
         run: |
           UUID=$(node -p 'require("./metadata.json").uuid')
           zip -q "$UUID.shell-extension.zip" \
-            extension.js decorator.js appgrid.js stylesheet.css metadata.json
+            extension.js decoratorBase.js decorator.js appgrid.js stylesheet.css metadata.json
           echo "packed $UUID.shell-extension.zip"
 
       - name: Upload extension artifact

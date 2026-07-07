@@ -30,7 +30,7 @@ export default class MissionWsExtension extends Extension {
             originalMethod => function (...args) {
                 originalMethod.apply(this, args);
                 for (const thumb of this._thumbnails)
-                    decorator.decorateThumbnail(thumb);
+                    decorator.decorate(thumb);
             });
 
         // Teach the box's drag-target interface about our reorder drags.
@@ -71,7 +71,7 @@ export default class MissionWsExtension extends Extension {
             originalMethod => function (...args) {
                 originalMethod.apply(this, args);
                 for (const tile of this._workspaces)
-                    tileDecorator.decorateTile(tile);
+                    tileDecorator.decorate(tile);
             });
 
         // A tile is itself a drop target (its metaWorkspace index IS the slot),

@@ -30,15 +30,21 @@ There is no test suite. CI (`.github/workflows/ci.yml`) only validates
 
 ## Architecture
 
-Two source files, patched onto the shell rather than added as a separate UI.
+Four source files, patched onto the shell rather than added as a separate UI.
+`extension.js` wires the injections; `decoratorBase.js` holds the decoration
+logic shared by both preview surfaces; `decorator.js` (thumbnail strip) and
+`appgrid.js` (app-grid tiles) are thin subclasses supplying only what differs.
 
 **`extension.js`** — the `Extension` entry point. `enable()` uses an
-`InjectionManager` to wrap three methods on the native
-`ThumbnailsBox.prototype` (from `resource:///.../ui/workspaceThumbnail.js`):
+`InjectionManager` to wrap `addThumbnails` / `handleDragOver` / `acceptDrop` on
+the native `ThumbnailsBox.prototype` (from
+`resource:///.../ui/workspaceThumbnail.js`) plus `_updateWorkspaces` /
+`handleDragOver` / `acceptDrop` on `WorkspacesView` and `Workspace` (the
+app-grid tiles):
 
 - `addThumbnails` — the single choke-point where the box builds thumbnails
-  (initial fill *and* later additions). Wrapped to call
-  `decorator.decorateThumbnail()` on each.
+  (initial fill *and* later additions). Wrapped to call `decorator.decorate()`
+  on each (`_updateWorkspaces` is the analogous choke-point for the tiles).
 - `handleDragOver` / `acceptDrop` — wrapped to recognise *our* reorder drag
   (identified by `source.isMissionWsReorder`) and call
   `global.workspace_manager.reorder_workspace()`. Any other drag source (e.g.
@@ -47,19 +53,34 @@ Two source files, patched onto the shell rather than added as a separate UI.
 `missionWsTargetIndex()` maps a pointer x-coordinate to the nearest thumbnail
 by horizontal centre — so dropping in the gap still reorders to the closest.
 
-**`decorator.js`** — `ThumbnailDecorator`, one long-lived instance owning all
-per-thumbnail decoration and its lifecycle. Per thumbnail it adds two circular
-`St.Button`s: a top-left drag **handle** (made draggable via `DND.makeDraggable`;
-its `_delegate` carries `isMissionWsReorder` + `sourceWorkspace`) and a
-top-right **close** button (`workspace_manager.remove_workspace`, never the last
-one). Circles are centred on the top corners so they overhang the edge — this
-requires disabling the thumbnail's `clip_to_allocation` (restored on teardown).
+**`decoratorBase.js`** — `WorkspaceDecoratorBase`, the long-lived instance
+owning all decoration and its lifecycle for one preview surface. Per preview it
+adds two circular `St.Button`s: a top-left drag **handle** (made draggable via
+`DND.makeDraggable`; its `_delegate` carries `isMissionWsReorder` +
+`sourceWorkspace`) and a top-right **close** button
+(`workspace_manager.remove_workspace`, never the last one). Circles are centred
+on the top corners so they overhang the edge — this requires disabling the
+actor's `clip_to_allocation` (restored on teardown).
 
 Show/hide is driven by **polling** `global.get_pointer()` against an expanded
-thumbnail rect every `POLL_INTERVAL` ms (see constants at the top of the file),
-not crossing events — deliberately, because the window clones sit on top and
-make enter/leave events unreliable. The hover zone extends `BUTTON_SIZE/2 +
-HOVER_EXTRA` px beyond the thumbnail so circles don't flicker at the edge.
+preview rect every `POLL_INTERVAL` ms, not crossing events — deliberately,
+because the window clones sit on top and make enter/leave events unreliable. The
+hover zone extends `BUTTON_SIZE/2 + HOVER_EXTRA` px beyond the preview so circles
+don't flicker at the edge. Subclasses override a handful of `_`-prefixed hooks —
+`_addButtons` (button geometry/placement), `_connectExtra` (extra per-actor
+wiring), `_shouldShowControls` (eligibility gate), `_onHoverResolved` (post-pick
+effect) — plus `setDropTarget` and a couple of instance fields (`_buttonSize`,
+`_hoverExtra`).
+
+**`decorator.js`** — `ThumbnailDecorator extends WorkspaceDecoratorBase`, for the
+overview thumbnail strip: 22px circles positioned absolutely (`set_position`,
+repositioned on resize), always eligible, raising the active thumbnail above its
+siblings. `missionWsTargetIndex()` (in `extension.js`) picks the drop slot.
+
+**`appgrid.js`** — `WorkspaceTileDecorator extends WorkspaceDecoratorBase`, for
+the app-grid ("Launchpad") `Workspace` tiles: larger 36px circles placed by
+BinLayout alignment + translation, gated to the `APP_GRID` overview state, each
+tile its own drop target (its `metaWorkspace.index()` is the slot).
 
 **`stylesheet.css`** — `.mission-ws-circle` and the per-button/drop-target
 classes. The close button leans red on hover, the handle blue.
@@ -70,10 +91,10 @@ classes. The close button leans red on hover, the handle blue.
   must be reverted in `disable()`/`_undecorate()`: `InjectionManager.clear()`,
   removing the `GLib.timeout` poll, disconnecting every stored signal id,
   `draggable.disconnectAll()`, destroying the button actors, restoring
-  `clip_to_allocation`, and deleting the `thumb._missionWs` marker. When adding
+  `clip_to_allocation`, and deleting the `actor._missionWs` marker. When adding
   any new actor/timer/handler, wire up its cleanup in the same commit.
-- Per-thumbnail state lives on `thumb._missionWs` (also the "already decorated"
-  guard — `decorateThumbnail` is idempotent).
+- Per-preview state lives on `actor._missionWs` (also the "already decorated"
+  guard — `decorate()` is idempotent).
 - Keep everything ESM with the `gi://` / `resource:///` import scheme already in
   use. `node --check` in CI is the only syntax gate, so it must stay valid ESM.
 - Bump `version-name` in `metadata.json` for releases; `shell-version` lists the
