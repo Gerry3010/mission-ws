@@ -25,7 +25,7 @@ The same controls also work on the larger workspace tiles in the app-grid
 
 ## Requirements
 
-- GNOME Shell **48 – 50** (developed and tested on 50.1, Wayland).
+- GNOME Shell **48 – 51** (developed on 50.1, tested on 50.1 and 51.1, Wayland).
 
 ## Install
 

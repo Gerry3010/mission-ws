@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 A GNOME Shell extension (UUID `mission-ws@geraldhofbauer.net`) that adds
 drag & drop workspace reordering to the overview thumbnail strip, plus
 Mac-Mission-Control-style hover circles on each thumbnail. Targets GNOME
-Shell **48–50** (developed on 50.1, Wayland). ES modules only (GJS/ESM).
+Shell **48–51** (developed on 50.1, tested on 51.1, Wayland). ES modules only (GJS/ESM).
 
 ## Commands
 
